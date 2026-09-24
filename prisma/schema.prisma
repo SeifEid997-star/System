@@ -1,0 +1,567 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Clinic {
+  id           String    @id @default(cuid())
+  name         String    @default("PetPals Veterinary Clinic")
+  slug         String    @unique @default("petpals")
+  logoUrl      String?
+  phone        String    @default("+20 100 123 4567")
+  email        String    @default("info@petpals-vet.com")
+  address      String    @default("24 El-Tahrir St, Dokki, Giza, Egypt")
+  country      String    @default("Egypt")
+  currency     String    @default("EGP")
+  timezone     String    @default("Africa/Cairo")
+  taxRate      Float     @default(14.0)
+  themePrimary String    @default("#0F766E")
+  taxId             String   @default("419-820-112")
+  commercialId      String   @default("91048-Cairo")
+  receiptFooter     String   @default("Thank you for trusting us! Medications sold are non-refundable once opened.")
+  slotDurationMinutes Int    @default(20)
+  openingTime       String  @default("09:00")
+  closingTime       String  @default("23:00")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  branches     Branch[]
+  users        User[]
+  owners       Owner[]
+  animals      Animal[]
+  appointments Appointment[]
+  medicalCases MedicalCase[]
+  invoices     Invoice[]
+  inventory    InventoryItem[]
+  services     Service[]
+  auditLogs    AuditLog[]
+  reminders    Reminder[]
+  clientTickets ClientTicket[]
+  suppliers    Supplier[]
+  purchases    Purchase[]
+  expenses     Expense[]
+  groomingSessions   GroomingSession[]
+  vaccinationRecords VaccinationRecord[]
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  clinicId  String
+  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  name      String
+  address   String
+  phone     String
+  tier      String   @default("OPERATIONAL") // OPERATIONAL, PRIMARY
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]
+  appointments Appointment[]
+  medicalCases MedicalCase[]
+  invoices     Invoice[]
+  inventory    InventoryItem[]
+  purchases    Purchase[]
+  expenses     Expense[]
+  groomingSessions GroomingSession[]
+
+  @@index([clinicId])
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  VETERINARIAN
+  RECEPTIONIST
+  ACCOUNTANT
+}
+
+model User {
+  id              String   @id @default(cuid())
+  clinicId        String
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  branchId        String?
+  branch          Branch?  @relation(fields: [branchId], references: [id])
+  name            String
+  email           String   @unique
+  passwordHash    String   @default("$2a$12$dummyhash")
+  phone           String?
+  role            String   @default("VETERINARIAN") // OWNER, MANAGER, VETERINARIAN, RECEPTIONIST, ACCOUNTANT
+  licenseNumber   String?
+  specialization  String?
+  experienceYears Int?     @default(0)
+  shift           String?  @default("Morning (9 AM - 5 PM)")
+  jobTitle        String?  @default("Veterinarian")
+  emergencyPhone  String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  appointments Appointment[]
+  medicalCases MedicalCase[]
+  auditLogs    AuditLog[]
+
+  @@index([clinicId, role])
+  @@index([branchId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  clinicId  String
+  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  userId    String   // MANDATORY: NEVER NULL - Fixes old system bug
+  userName  String   // Recorded for snapshot integrity
+  userRole  String?
+  user      User     @relation(fields: [userId], references: [id])
+  action    String   // CREATE, UPDATE, DELETE, LOGIN, EXPORT, INVOICE_VOID, REFUND
+  entity    String   // Animal, Invoice, MedicalCase, Inventory, Staff
+  entityId  String?
+  details   String?
+  ipAddress String?  @default("127.0.0.1")
+  createdAt DateTime @default(now())
+
+  @@index([clinicId, createdAt])
+  @@index([entity, entityId])
+}
+
+model Owner {
+  id         String   @id @default(cuid())
+  clinicId   String
+  clinic     Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  name       String
+  phone      String
+  email      String?
+  address    String?
+  nationalId String?
+  notes      String?
+  balance    Float    @default(0.0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  animals       Animal[]
+  invoices      Invoice[]
+  reminders     Reminder[]
+  clientTickets ClientTicket[]
+
+  @@index([clinicId, phone])
+  @@index([clinicId, createdAt])
+}
+
+model Animal {
+  id              String    @id @default(cuid())
+  clinicId        String
+  clinic          Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  ownerId         String
+  owner           Owner     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name            String
+  species         String    @default("Canine") // Canine, Feline, Avian, Exotic
+  breed           String?
+  gender          String    @default("Male") // Male, Female, Neutered Male, Spayed Female
+  birthDate       DateTime?
+  color           String?
+  microchipNumber String?
+  photoUrl        String?
+  bloodType       String?
+  isNeutered      Boolean   @default(false)
+  weightKg        Float?    @default(0.0)
+  notes           String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  appointments         Appointment[]
+  medicalCases         MedicalCase[]
+  invoices             Invoice[]
+  boardingReservations BoardingReservation[]
+  reminders            Reminder[]
+  groomingSessions     GroomingSession[]
+  vaccinationRecords   VaccinationRecord[]
+
+  @@index([clinicId, createdAt])
+  @@index([ownerId])
+  @@index([species])
+}
+
+model Appointment {
+  id              String   @id @default(cuid())
+  clinicId        String
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  branchId        String
+  branch          Branch   @relation(fields: [branchId], references: [id])
+  animalId        String
+  animal          Animal   @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  veterinarianId  String?
+  veterinarian    User?    @relation(fields: [veterinarianId], references: [id])
+  appointmentDate DateTime
+  appointmentTime String   @default("10:00 AM")
+  type            String   @default("CONSULTATION") // CONSULTATION, VACCINATION, SURGERY, GROOMING, CHECKUP, BOARDING
+  status          String   @default("SCHEDULED") // SCHEDULED, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW
+  reason          String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([clinicId, appointmentDate])
+  @@index([branchId, appointmentDate])
+  @@index([animalId, appointmentDate])
+}
+
+model MedicalCase {
+  id                String   @id @default(cuid())
+  clinicId          String
+  clinic            Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  branchId          String
+  branch            Branch   @relation(fields: [branchId], references: [id])
+  animalId          String
+  animal            Animal   @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  veterinarianId    String
+  veterinarian      User     @relation(fields: [veterinarianId], references: [id])
+  caseNumber        String   @unique
+  status            String   @default("OPEN") // OPEN, IN_PROGRESS, COMPLETED
+  isVisibleToClient Boolean  @default(true)
+  temperature       Float?   // Body temp °C
+  weightKg          Float?
+  heartRate         Int?     // bpm
+  respirationRate   Int?     // bpm
+  bcs               String?  @default("5/9") // Body Condition Score
+  diagnosis         String?
+  symptoms          String?
+  clinicalNotes     String?
+  treatmentPlan     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  attachments       MedicalAttachment[]
+  prescriptionItems PrescriptionItem[]
+  invoices          Invoice[]
+
+  @@index([clinicId, createdAt])
+  @@index([animalId, status])
+  @@index([branchId, status])
+}
+
+model MedicalAttachment {
+  id         String      @id @default(cuid())
+  caseId     String
+  medicalCase MedicalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  fileName   String
+  fileUrl    String
+  fileType   String      @default("IMAGE") // IMAGE, PDF, XRAY, LAB_REPORT
+  fileSize   Int?        @default(0)
+  uploadedBy String?
+  createdAt  DateTime    @default(now())
+}
+
+model PrescriptionItem {
+  id             String      @id @default(cuid())
+  caseId         String
+  medicalCase    MedicalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  medicationName String
+  dosage         String
+  frequency      String
+  durationDays   Int         @default(7)
+  instructions   String?
+  createdAt      DateTime    @default(now())
+}
+
+model ServiceCategory {
+  id        String    @id @default(cuid())
+  name      String
+  code      String    @unique
+  services  Service[]
+  createdAt DateTime  @default(now())
+}
+
+model Service {
+  id                     String           @id @default(cuid())
+  clinicId               String
+  clinic                 Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  categoryId             String
+  category               ServiceCategory  @relation(fields: [categoryId], references: [id])
+  name                   String
+  price                  Float            @default(0.0)
+  cost                   Float            @default(0.0)
+  durationMinutes        Int              @default(30)
+  isActive               Boolean          @default(true)
+  linkedInventoryItemId  String?
+  createdAt              DateTime         @default(now())
+
+  @@index([clinicId, isActive])
+  @@index([categoryId])
+}
+
+model InventoryCategory {
+  id        String          @id @default(cuid())
+  name      String
+  code      String          @unique
+  items     InventoryItem[]
+  createdAt DateTime        @default(now())
+}
+
+model InventoryItem {
+  id             String            @id @default(cuid())
+  clinicId       String
+  clinic         Clinic            @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  branchId       String
+  branch         Branch            @relation(fields: [branchId], references: [id])
+  categoryId     String
+  category       InventoryCategory @relation(fields: [categoryId], references: [id])
+  name           String
+  sku            String            @unique
+  barcode        String?
+  quantity       Int               @default(0)
+  minStockAlert  Int               @default(5)
+  unitCost       Float             @default(0.0)
+  salePrice      Float             @default(0.0)
+  expiryDate     DateTime?
+  batchNumber    String?
+  isPosAvailable Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([clinicId, updatedAt])
+  @@index([branchId, categoryId])
+  @@index([categoryId])
+}
+
+model Invoice {
+  id            String          @id @default(cuid())
+  clinicId      String
+  clinic        Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  branchId      String
+  branch        Branch          @relation(fields: [branchId], references: [id])
+  invoiceNumber String          @unique
+  customerName  String
+  customerPhone String?
+  ownerId       String?
+  owner         Owner?          @relation(fields: [ownerId], references: [id])
+  animalId      String?
+  animal        Animal?         @relation(fields: [animalId], references: [id])
+  medicalCaseId String?
+  medicalCase   MedicalCase?    @relation(fields: [medicalCaseId], references: [id])
+  status        String          @default("PAID") // PAID, PARTIAL, UNPAID, VOIDED, REFUNDED
+  subtotal      Float           @default(0.0)
+  discount      Float           @default(0.0)
+  tax           Float           @default(0.0)
+  total         Float           @default(0.0)
+  paidAmount    Float           @default(0.0)
+  dueAmount     Float           @default(0.0)
+  paymentMethod String          @default("CASH") // CASH, CREDIT_CARD, BANK_TRANSFER, VODAFONE_CASH, INSTAPAY, MULTIPLE
+  type          String          @default("INVOICE") // INVOICE, POS_RECEIPT
+  notes         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  items         InvoiceItem[]
+  payments      PaymentRecord[]
+
+  @@index([clinicId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([status, createdAt])
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  itemType    String   @default("SERVICE") // SERVICE, INVENTORY
+  referenceId String?
+  description String
+  quantity    Int      @default(1)
+  unitPrice   Float    @default(0.0)
+  discount    Float    @default(0.0)
+  total       Float    @default(0.0)
+  createdAt   DateTime @default(now())
+
+  @@index([invoiceId])
+  @@index([referenceId])
+}
+
+model PaymentRecord {
+  id              String   @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount          Float
+  paymentMethod   String   @default("CASH")
+  referenceNumber String?
+  receivedBy      String   @default("Reception")
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  @@index([invoiceId])
+}
+
+model BoardingRoom {
+  id           String                @id @default(cuid())
+  roomNumber   String
+  roomType     String                @default("STANDARD") // STANDARD, DELUXE, SUITE, ISOLATION
+  capacity     Int                   @default(1)
+  pricePerDay  Float                 @default(250.0)
+  isActive     Boolean               @default(true)
+  reservations BoardingReservation[]
+}
+
+model BoardingReservation {
+  id                  String             @id @default(cuid())
+  roomId              String
+  room                BoardingRoom       @relation(fields: [roomId], references: [id])
+  animalId            String
+  animal              Animal             @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  startDate           DateTime
+  endDate             DateTime
+  dailyRate           Float              @default(250.0)
+  status              String             @default("ACTIVE") // ACTIVE, COMPLETED, CANCELLED
+  specialInstructions String?
+  createdAt           DateTime           @default(now())
+
+  dailyLogs           BoardingDailyLog[]
+}
+
+model BoardingDailyLog {
+  id               String              @id @default(cuid())
+  reservationId    String
+  reservation      BoardingReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  logDate          DateTime            @default(now())
+  generalCondition String              @default("Good")
+  appetiteFed      Boolean             @default(true)
+  medicationsGiven Boolean             @default(true)
+  notes            String?
+  loggedBy         String              @default("Staff")
+  createdAt        DateTime            @default(now())
+}
+
+model Reminder {
+  id           String    @id @default(cuid())
+  clinicId     String
+  clinic       Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  animalId     String
+  animal       Animal    @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  ownerId      String
+  owner        Owner     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  reminderType String    @default("VACCINATION") // VACCINATION, DEWORMING, FOLLOW_UP, CHECKUP, BIRTHDAY
+  dueDate      DateTime
+  status       String    @default("PENDING") // PENDING, SENT, COMPLETED, DISMISSED
+  channel      String    @default("WHATSAPP") // WHATSAPP, SMS, EMAIL, APP_NOTIFICATION
+  isAutomated  Boolean   @default(true)
+  notes        String?
+  createdAt    DateTime  @default(now())
+}
+
+model ClientTicket {
+  id        String   @id @default(cuid())
+  clinicId  String
+  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  ownerId   String
+  owner     Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  subject   String
+  message   String
+  status    String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  priority  String   @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Supplier {
+  id                 String     @id @default(cuid())
+  clinicId           String
+  clinic             Clinic     @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  name               String
+  category           String     @default("Pharmaceuticals & Vaccines")
+  contactPerson      String     @default("General Representative")
+  phone              String
+  email              String?
+  city               String     @default("Cairo, Egypt")
+  paymentTerms       String     @default("Net 30 Days")
+  outstandingBalance Float      @default(0.0)
+  isActive           Boolean    @default(true)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  purchases Purchase[]
+
+  @@index([clinicId, isActive])
+}
+
+model Purchase {
+  id            String   @id @default(cuid())
+  clinicId      String
+  clinic        Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  branchId      String
+  branch        Branch   @relation(fields: [branchId], references: [id])
+  supplierId    String
+  supplier      Supplier @relation(fields: [supplierId], references: [id])
+  poNumber      String   @unique
+  itemsCount    Int      @default(1)
+  totalAmount   Float    @default(0.0)
+  paidAmount    Float    @default(0.0)
+  status        String   @default("RECEIVED") // RECEIVED, PENDING
+  paymentStatus String   @default("UNPAID") // PAID, PARTIAL, UNPAID
+  createdAt     DateTime @default(now())
+
+  @@index([clinicId, createdAt])
+  @@index([supplierId])
+  @@index([branchId])
+}
+
+model GroomingSession {
+  id          String   @id @default(cuid())
+  clinicId    String
+  clinic      Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  branchId    String
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  animalId    String
+  animal      Animal   @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  service     String
+  stylist     String   @default("Groomer")
+  scheduledAt DateTime @default(now())
+  price       Float    @default(0.0)
+  status      String   @default("SCHEDULED") // SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([clinicId, scheduledAt])
+  @@index([branchId])
+  @@index([animalId])
+}
+
+model VaccinationRecord {
+  id             String    @id @default(cuid())
+  clinicId       String
+  clinic         Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  animalId       String
+  animal         Animal    @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  vaccineType    String    @default("RABIES") // RABIES, DEWORMING, OTHER
+  productName    String
+  batchNumber    String?
+  dateGiven      DateTime
+  validUntil     DateTime?
+  vetName        String?
+  vetLicense     String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+
+  @@index([clinicId, animalId])
+  @@index([animalId, vaccineType])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  clinicId    String
+  clinic      Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  branchId    String?
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  category    String   @default("Rent & Facilities")
+  description String
+  amount      Float    @default(0.0)
+  recordedBy  String   @default("Active Accountant")
+  method      String   @default("Cash") // Cash, InstaPay, Vodafone Cash, Bank Wire
+  createdAt   DateTime @default(now())
+
+  @@index([clinicId, createdAt])
+  @@index([branchId])
+}
