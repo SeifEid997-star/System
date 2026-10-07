@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -93,6 +93,29 @@ export default function SuperAdminPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("qlinic_superadmin_tenants");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setTenants(parsed);
+          }
+        } catch (e) {
+          console.error("Error loading saved tenants:", e);
+        }
+      }
+    }
+  }, []);
+
+  const persistTenants = (updated: ClinicTenant[]) => {
+    setTenants(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("qlinic_superadmin_tenants", JSON.stringify(updated));
+    }
+  };
+
   const [newTenant, setNewTenant] = useState({
     name: "",
     city: "",
@@ -107,32 +130,30 @@ export default function SuperAdminPage() {
   const totalPatients = tenants.reduce((acc, t) => acc + t.patientsCount, 0);
 
   const toggleStatus = (id: string) => {
-    setTenants((prev) =>
-      prev.map((t) => {
-        if (t.id === id) {
-          const nextStatus = t.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
-          setToastMessage(
-            `تم تغيير حالة ترخيص "${t.name}" إلى: ${nextStatus === "ACTIVE" ? "مفعل ✅" : "موقوف (Suspended) ⛔"}`
-          );
-          setTimeout(() => setToastMessage(""), 4000);
-          return { ...t, status: nextStatus };
-        }
-        return t;
-      })
-    );
+    const updated = tenants.map((t) => {
+      if (t.id === id) {
+        const nextStatus = t.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
+        setToastMessage(
+          `تم تغيير حالة ترخيص "${t.name}" إلى: ${nextStatus === "ACTIVE" ? "مفعل ✅" : "موقوف (Suspended) ⛔"}`
+        );
+        setTimeout(() => setToastMessage(""), 4000);
+        return { ...t, status: nextStatus as any };
+      }
+      return t;
+    });
+    persistTenants(updated);
   };
 
   const renewOneYear = (id: string) => {
-    setTenants((prev) =>
-      prev.map((t) => {
-        if (t.id === id) {
-          setToastMessage(`تم تمديد اشتراك "${t.name}" لمدة عام إضافي بنجاح!`);
-          setTimeout(() => setToastMessage(""), 4000);
-          return { ...t, expiresAt: "22-09-2028 (Extended +1Y)", status: "ACTIVE" };
-        }
-        return t;
-      })
-    );
+    const updated = tenants.map((t) => {
+      if (t.id === id) {
+        setToastMessage(`تم تمديد اشتراك "${t.name}" لمدة عام إضافي بنجاح!`);
+        setTimeout(() => setToastMessage(""), 4000);
+        return { ...t, expiresAt: "22-09-2028 (Extended +1Y)", status: "ACTIVE" as any };
+      }
+      return t;
+    });
+    persistTenants(updated);
   };
 
   const copyLicense = (key: string) => {
@@ -159,7 +180,8 @@ export default function SuperAdminPage() {
       status: "ACTIVE",
     };
 
-    setTenants([created, ...tenants]);
+    const updated = [created, ...tenants];
+    persistTenants(updated);
     setIsModalOpen(false);
     setNewTenant({ name: "", city: "", plan: "Professional", mrrEgp: 8500 });
     setToastMessage(`تم تسجيل عيادة "${created.name}" وإصدار ترخيصها بنجاح!`);

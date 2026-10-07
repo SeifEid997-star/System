@@ -294,6 +294,17 @@ ${results.map((r, i) => `${i + 1}. ${r.condition} (${r.probability}% Match - ${r
           symptoms: selectedSymptoms.join(", "),
           clinicalNotes,
           treatmentPlan: topResult ? topResult.firstLineTherapy : "",
+          prescriptions: selectedDrug
+            ? [
+                {
+                  medicationName: selectedDrug.toUpperCase(),
+                  dosage: calculatedDose.doseMg,
+                  frequency: calculatedDose.frequency,
+                  durationDays: 7,
+                  instructions: calculatedDose.mlPerDose,
+                },
+              ]
+            : [],
         }),
       });
       if (res.ok) {

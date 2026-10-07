@@ -17,3 +17,11 @@ prisma/*.sqlite*
 .DS_Store
 Thumbs.db
 *.zip
+Ai-Dental/
+Ai-Dental-Images/
+*.rar
+_Qlinic-v2-final-package-qa/
+_System-github-review/
+Qlinic-v2-final/
+
+
