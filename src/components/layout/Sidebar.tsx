@@ -86,7 +86,6 @@ const navSections: NavSection[] = [
       { label: "Suppliers", href: "/management/suppliers", icon: Truck },
       { label: "Expenses", href: "/management/expenses", icon: CreditCard },
       { label: "Data Import", href: "/management/data-import", icon: UploadCloud },
-      { label: "SuperAdmin SaaS", href: "/superadmin", icon: Shield, badge: "Vendor", badgeColor: "bg-purple-500/10 text-purple-600" },
     ],
   },
   {

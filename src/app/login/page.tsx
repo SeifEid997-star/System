@@ -6,12 +6,6 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Lock, Mail, ArrowRight, ShieldCheck } from "lucide-react";
 
-const demoAccounts = [
-  ["Clinic Owner", "omar@petpals-vet.com"],
-  ["Veterinarian", "sara@petpals-vet.com"],
-  ["Receptionist", "sarah@petpals-vet.com"],
-  ["Accountant", "tarek@petpals-vet.com"],
-];
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -58,13 +52,11 @@ export default function LoginPage() {
               {loading ? "Authenticating..." : "Sign In to Clinic"}
             </Button>
           </form>
-          <div className="pt-4 border-t border-white/10 space-y-3">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider text-center">Demo staff accounts</p>
-            <div className="grid grid-cols-2 gap-2">{demoAccounts.map(([role, accountEmail]) => <button key={accountEmail} type="button" onClick={() => { setEmail(accountEmail); setPassword("Clinic@123"); setError(""); }} className="p-2.5 rounded-xl border border-white/10 bg-black/10 hover:bg-white/10 text-left"><span className="text-xs font-bold block">{role}</span><span className="text-[10px] text-slate-400">{accountEmail}</span></button>)}</div>
-            <p className="text-center text-[11px] text-slate-400">Seeded demo password: <span className="font-semibold text-slate-300">Clinic@123</span></p>
-          </div>
         </section>
-        <footer className="flex items-center justify-center gap-2 text-slate-400 text-xs"><ShieldCheck className="w-4 h-4 text-teal-400" /><span>Password verified against the clinic database</span></footer>
+        <footer className="flex items-center justify-center gap-2 text-slate-400 text-xs">
+          <ShieldCheck className="w-4 h-4 text-teal-400" />
+          <span>PetPals Clinic Management Portal &bull; Encrypted Session</span>
+        </footer>
       </div>
     </main>
   );
