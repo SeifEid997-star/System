@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
 import { logAuditForRequest } from "@/lib/audit";
 
 export async function GET(req: NextRequest) {
@@ -102,14 +103,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Expiry date must be a valid date in the future" }, { status: 400 });
     }
 
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 400 });
-
-    const branch = branchId
-      ? await db.branch.findUnique({ where: { id: branchId } })
-      : await db.branch.findFirst({ where: { clinicId: clinic.id } });
-
-    if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 400 });
+    const { clinic, branch } = await getOrCreateDefaultClinicAndBranch(branchId);
 
     // Find or create category
     let category = await db.inventoryCategory.findFirst({

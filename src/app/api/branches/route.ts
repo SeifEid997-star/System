@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
 import { logAuditForRequest } from "@/lib/audit";
 import { cleanText, isValidPhone } from "@/lib/validation";
 
@@ -10,7 +11,7 @@ export async function GET(req: NextRequest) {
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
-    const branches = await db.branch.findMany({
+    let branches = await db.branch.findMany({
       include: {
         _count: {
           select: { users: true },
@@ -24,6 +25,24 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { createdAt: "asc" },
     });
+
+    if (branches.length === 0) {
+      await getOrCreateDefaultClinicAndBranch();
+      branches = await db.branch.findMany({
+        include: {
+          _count: {
+            select: { users: true },
+          },
+          appointments: {
+            where: {
+              appointmentDate: { gte: startOfDay, lte: endOfDay },
+            },
+            select: { id: true },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+    }
 
     const shaped = branches.map((b) => ({
       id: b.id,
@@ -55,8 +74,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Enter a branch name, address, and valid phone number" }, { status: 400 });
     }
 
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 400 });
+    const { clinic } = await getOrCreateDefaultClinicAndBranch();
 
     const branch = await db.branch.create({
       data: {

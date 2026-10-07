@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
 import { logAuditForRequest } from "@/lib/audit";
 import { hashPassword } from "@/lib/password";
 import { cleanText, isValidEmail, isValidPhone } from "@/lib/validation";
@@ -69,13 +70,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Enter a valid name, email, phone, role, experience, and password (12+ characters with upper/lower case and a number)" }, { status: 400 });
     }
 
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 400 });
-
-    const branch = branchId
-      ? await db.branch.findFirst({ where: { id: branchId, clinicId: clinic.id } })
-      : await db.branch.findFirst({ where: { clinicId: clinic.id } });
-    if (!branch) return NextResponse.json({ error: "Branch not found in this clinic" }, { status: 400 });
+    const { clinic, branch } = await getOrCreateDefaultClinicAndBranch(branchId);
 
     if (await db.user.findUnique({ where: { email: cleanEmail } })) {
       return NextResponse.json({ error: "An account already uses this email" }, { status: 409 });

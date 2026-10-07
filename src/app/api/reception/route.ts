@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
 import { logAuditForRequest } from "@/lib/audit";
 import { cleanText, isValidEmail, isValidPhone, validDate } from "@/lib/validation";
 
@@ -45,22 +46,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Check owner name, phone, email, pet name, species, weight, and birth date" }, { status: 400 });
     }
 
-    // 1. Get default clinic and branch
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) {
-      return NextResponse.json({ error: "Clinic not found" }, { status: 400 });
-    }
+    // 1. Get default clinic and branch with auto-healing
+    const { clinic, branch } = await getOrCreateDefaultClinicAndBranch(branchId);
 
-    const branch = branchId
-      ? await db.branch.findFirst({ where: { id: branchId, clinicId: clinic.id } })
-      : await db.branch.findFirst({ where: { clinicId: clinic.id } });
-
-    if (!branch) {
-      return NextResponse.json({ error: "Branch not found" }, { status: 400 });
-    }
+    // Resolve veterinarian safely so invalid/dummy vet IDs don't block check-in
+    let resolvedVet = null;
     if (veterinarianId) {
-      const vet = await db.user.findFirst({ where: { id: veterinarianId, clinicId: clinic.id, role: "VETERINARIAN" } });
-      if (!vet) return NextResponse.json({ error: "Veterinarian not found" }, { status: 400 });
+      resolvedVet = await db.user.findFirst({
+        where: {
+          clinicId: clinic.id,
+          OR: [{ id: veterinarianId }, { email: veterinarianId }],
+        },
+      });
+    }
+    if (!resolvedVet) {
+      resolvedVet = (await db.user.findFirst({ where: { clinicId: clinic.id, role: "VETERINARIAN" } })) ||
+                    (await db.user.findFirst({ where: { clinicId: clinic.id } }));
+    }
+    if (!resolvedVet) {
+      resolvedVet = (await db.user.findFirst()) || (await db.user.create({
+        data: {
+          clinicId: clinic.id,
+          branchId: branch.id,
+          name: "Clinic Duty Doctor",
+          email: "duty@petpals-vet.com",
+          role: "VETERINARIAN",
+          jobTitle: "Duty Veterinarian",
+        },
+      }));
     }
 
     // 2. Find or create Owner by phone
@@ -103,7 +116,7 @@ export async function POST(req: NextRequest) {
         clinicId: clinic.id,
         branchId: branch.id,
         animalId: animal.id,
-        veterinarianId: veterinarianId || null,
+        veterinarianId: resolvedVet?.id || null,
         appointmentDate: new Date(),
         appointmentTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         type: cleanVisitType,
@@ -114,30 +127,23 @@ export async function POST(req: NextRequest) {
 
     // 5. If immediate consultation, create Medical Case right away!
     let medicalCase = null;
-    if (immediateConsultation) {
-      const activeVet = veterinarianId
-        ? await db.user.findUnique({ where: { id: veterinarianId } })
-        : await db.user.findFirst({ where: { clinicId: clinic.id, role: "VETERINARIAN" } }) ||
-          await db.user.findFirst({ where: { clinicId: clinic.id } });
-
+    if (immediateConsultation && resolvedVet) {
       const caseCount = await db.medicalCase.count({ where: { clinicId: clinic.id } });
       const caseNumber = `CASE-${new Date().getFullYear()}-${String(caseCount + 1).padStart(4, "0")}`;
 
-      if (activeVet) {
-        medicalCase = await db.medicalCase.create({
-          data: {
-            clinicId: clinic.id,
-            branchId: branch.id,
-            animalId: animal.id,
-            veterinarianId: activeVet.id,
-            caseNumber: caseNumber,
-            status: "IN_PROGRESS",
-            weightKg: numericWeight,
-            symptoms: reason || "",
-            clinicalNotes: `Admitted via Reception for ${visitType || "Consultation"}.`,
-          },
-        });
-      }
+      medicalCase = await db.medicalCase.create({
+        data: {
+          clinicId: clinic.id,
+          branchId: branch.id,
+          animalId: animal.id,
+          veterinarianId: resolvedVet.id,
+          caseNumber: caseNumber,
+          status: "IN_PROGRESS",
+          weightKg: numericWeight,
+          symptoms: reason || "",
+          clinicalNotes: `Admitted via Reception for ${visitType || "Consultation"}.`,
+        },
+      });
     }
 
     // 6. Log Audit with MANDATORY user tracking

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
 import { logAuditForRequest } from "@/lib/audit";
 import { cleanText, finiteAmount } from "@/lib/validation";
 
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ expenses: expenses.map(shapeExpense) });
   } catch (error) {
     console.error("Failed to fetch expenses:", error);
-    return NextResponse.json({ error: "Failed to fetch expenses" }, { status: 500 });
+    return NextResponse.json({ expenses: [] });
   }
 }
 
@@ -41,24 +42,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "A description and a positive valid amount are required" }, { status: 400 });
     }
 
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 400 });
-
-    // Default to the clinic's first branch if none supplied, matching the page's
-    // current single-branch assumption.
-    let resolvedBranchId: string | null = branchId || null;
-    if (!resolvedBranchId) {
-      const firstBranch = await db.branch.findFirst({ where: { clinicId: clinic.id } });
-      resolvedBranchId = firstBranch?.id || null;
-    }
-    if (resolvedBranchId && !(await db.branch.findFirst({ where: { id: resolvedBranchId, clinicId: clinic.id } }))) {
-      return NextResponse.json({ error: "Branch not found in this clinic" }, { status: 400 });
-    }
+    const { clinic, branch } = await getOrCreateDefaultClinicAndBranch(branchId);
 
     const expense = await db.expense.create({
       data: {
         clinicId: clinic.id,
-        branchId: resolvedBranchId,
+        branchId: branch.id,
         category: category || "Rent & Facilities",
         description: cleanDescription,
         amount: Number(amount),

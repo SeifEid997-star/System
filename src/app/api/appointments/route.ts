@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
 import { logAudit } from "@/lib/audit";
 import { cleanText, validDate } from "@/lib/validation";
 
@@ -47,20 +48,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Choose a patient and enter a valid date, time, appointment type, and reason" }, { status: 400 });
     }
 
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 400 });
-
-    const activeBranch = branchId
-      ? await db.branch.findFirst({ where: { id: branchId, clinicId: clinic.id } })
-      : await db.branch.findFirst({ where: { clinicId: clinic.id } });
-
-    if (!activeBranch) return NextResponse.json({ error: "Branch not found" }, { status: 400 });
+    const { clinic, branch: activeBranch } = await getOrCreateDefaultClinicAndBranch(branchId);
 
     const animal = await db.animal.findFirst({ where: { id: animalId, clinicId: clinic.id } });
     if (!animal) return NextResponse.json({ error: "Patient not found in this clinic" }, { status: 404 });
+    let assignedVetId: string | null = null;
     if (veterinarianId) {
-      const vet = await db.user.findFirst({ where: { id: veterinarianId, clinicId: clinic.id, role: "VETERINARIAN" } });
-      if (!vet) return NextResponse.json({ error: "Veterinarian not found" }, { status: 400 });
+      const vet = await db.user.findFirst({
+        where: {
+          clinicId: clinic.id,
+          OR: [{ id: veterinarianId }, { email: veterinarianId }],
+        },
+      });
+      if (vet) assignedVetId = vet.id;
     }
 
     const appointment = await db.appointment.create({
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
         clinicId: clinic.id,
         branchId: activeBranch.id,
         animalId: animalId,
-        veterinarianId: veterinarianId || null,
+        veterinarianId: assignedVetId,
         appointmentDate: new Date(appointmentDate),
         appointmentTime: time || "10:00 AM",
         type: cleanType,

@@ -91,20 +91,29 @@ export default function PosPage() {
           servicesResponse.json(),
         ]);
         const inventory: ProductItem[] = (inventoryData.items || [])
-          .filter((item: any) => item.isPosAvailable)
+          .filter((item: any) => item.isPosAvailable !== false)
           .map((item: any) => ({
-            id: item.id, name: item.name, category: item.category.name,
-            price: item.salePrice, stock: item.quantity,
-            barcode: item.barcode || item.sku, type: "INVENTORY" as const,
+            id: item.id,
+            name: item.name,
+            category: item.category?.name || "Medications",
+            price: item.salePrice || 0,
+            stock: item.quantity ?? 0,
+            barcode: item.barcode || item.sku || `INV-${item.id?.slice(-4)}`,
+            type: "INVENTORY" as const,
           }));
         const services: ProductItem[] = (servicesData.services || [])
-          .filter((service: any) => service.isActive)
+          .filter((service: any) => service.isActive !== false)
           .map((service: any) => ({
-            id: service.id, name: service.name, category: service.category.name,
-            price: service.price, stock: 999,
-            barcode: `SRV-${service.id.slice(-6).toUpperCase()}`, type: "SERVICE" as const,
+            id: service.id,
+            name: service.name,
+            category: service.category?.name || "Services",
+            price: service.price || 0,
+            stock: 999,
+            barcode: `SRV-${(service.id || "0000").slice(-6).toUpperCase()}`,
+            type: "SERVICE" as const,
           }));
-        setCatalog([...inventory, ...services]);
+        const combined = [...inventory, ...services];
+        setCatalog(combined.length > 0 ? combined : FALLBACK_CATALOG_ITEMS);
       } catch (error) {
         console.error("Failed to load POS catalog:", error);
         setCatalog(FALLBACK_CATALOG_ITEMS);

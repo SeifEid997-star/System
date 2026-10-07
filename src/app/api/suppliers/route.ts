@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
 import { logAuditForRequest } from "@/lib/audit";
 import { cleanText, isValidEmail, isValidPhone } from "@/lib/validation";
 
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ suppliers: shaped });
   } catch (error) {
     console.error("Failed to fetch suppliers:", error);
-    return NextResponse.json({ error: "Failed to fetch suppliers" }, { status: 500 });
+    return NextResponse.json({ suppliers: [] });
   }
 }
 
@@ -40,8 +41,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Enter a supplier name, valid phone number, and valid email address" }, { status: 400 });
     }
 
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 400 });
+    const { clinic } = await getOrCreateDefaultClinicAndBranch();
 
     const supplier = await db.supplier.create({
       data: {

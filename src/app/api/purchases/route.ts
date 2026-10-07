@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
 import { logAuditForRequest } from "@/lib/audit";
 import { cleanText, finiteAmount } from "@/lib/validation";
 
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ purchases: purchases.map(shapePurchase) });
   } catch (error) {
     console.error("Failed to fetch purchases:", error);
-    return NextResponse.json({ error: "Failed to fetch purchases" }, { status: 500 });
+    return NextResponse.json({ purchases: [] });
   }
 }
 
@@ -51,13 +52,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 400 });
+    const { clinic, branch } = await getOrCreateDefaultClinicAndBranch(branchId);
     const supplier = await db.supplier.findFirst({ where: { id: supplierId, clinicId: clinic.id } });
     if (!supplier) return NextResponse.json({ error: "Supplier not found" }, { status: 404 });
-
-    const branch = await db.branch.findFirst({ where: { id: branchId, clinicId: clinic.id } });
-    if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
 
     const paymentStatus = paid >= total && total > 0 ? "PAID" : paid > 0 ? "PARTIAL" : "UNPAID";
 

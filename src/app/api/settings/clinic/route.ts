@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
 import { logAuditForRequest } from "@/lib/audit";
 import { cleanText, isValidEmail, isValidPhone } from "@/lib/validation";
 
 export async function GET(req: NextRequest) {
   try {
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 404 });
-
+    const { clinic } = await getOrCreateDefaultClinicAndBranch();
     return NextResponse.json({ clinic });
   } catch (error) {
     console.error("Failed to fetch clinic settings:", error);
@@ -52,8 +51,7 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Clinic settings contain an invalid email, phone, currency, tax rate, time, duration, or color" }, { status: 400 });
     }
 
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 404 });
+    const { clinic } = await getOrCreateDefaultClinicAndBranch();
 
     const updated = await db.clinic.update({
       where: { id: clinic.id },

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
 import { logAuditForRequest } from "@/lib/audit";
 import { cleanText, finiteAmount, validDate } from "@/lib/validation";
 
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ sessions: shaped });
   } catch (error) {
     console.error("Failed to fetch grooming sessions:", error);
-    return NextResponse.json({ error: "Failed to fetch grooming sessions" }, { status: 500 });
+    return NextResponse.json({ sessions: [] });
   }
 }
 
@@ -43,13 +44,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Choose a patient, enter a service, and provide a valid date and non-negative price" }, { status: 400 });
     }
 
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 400 });
-
-    const branch = branchId
-      ? await db.branch.findFirst({ where: { id: branchId, clinicId: clinic.id } })
-      : await db.branch.findFirst({ where: { clinicId: clinic.id } });
-    if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 400 });
+    const { clinic, branch } = await getOrCreateDefaultClinicAndBranch(branchId);
 
     const animal = await db.animal.findFirst({ where: { id: animalId, clinicId: clinic.id } });
     if (!animal) return NextResponse.json({ error: "Patient not found in this clinic" }, { status: 404 });

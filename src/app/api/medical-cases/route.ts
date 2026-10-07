@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
 import { logAuditForRequest } from "@/lib/audit";
 
 export async function GET(req: NextRequest) {
@@ -57,20 +58,29 @@ export async function POST(req: NextRequest) {
       attachments = [],
     } = body;
 
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 400 });
+    const { clinic, branch: activeBranch } = await getOrCreateDefaultClinicAndBranch(branchId);
 
-    const activeBranch = branchId
-      ? await db.branch.findUnique({ where: { id: branchId } })
-      : await db.branch.findFirst({ where: { clinicId: clinic.id } });
+    let activeVet = veterinarianId
+      ? await db.user.findFirst({
+          where: {
+            clinicId: clinic.id,
+            OR: [{ id: veterinarianId }, { email: veterinarianId }],
+          },
+        })
+      : (await db.user.findFirst({ where: { clinicId: clinic.id, role: "VETERINARIAN" } })) ||
+        (await db.user.findFirst({ where: { clinicId: clinic.id } }));
 
-    const activeVet = veterinarianId
-      ? await db.user.findUnique({ where: { id: veterinarianId } })
-      : await db.user.findFirst({ where: { clinicId: clinic.id, role: "VETERINARIAN" } }) ||
-        await db.user.findFirst({ where: { clinicId: clinic.id } });
-
-    if (!activeBranch || !activeVet) {
-      return NextResponse.json({ error: "Branch or Veterinarian not found" }, { status: 400 });
+    if (!activeVet) {
+      activeVet = (await db.user.findFirst()) || (await db.user.create({
+        data: {
+          clinicId: clinic.id,
+          branchId: activeBranch.id,
+          name: "Clinic Duty Doctor",
+          email: "duty@petpals-vet.com",
+          role: "VETERINARIAN",
+          jobTitle: "Duty Veterinarian",
+        },
+      }));
     }
 
     const count = await db.medicalCase.count({ where: { clinicId: clinic.id } });

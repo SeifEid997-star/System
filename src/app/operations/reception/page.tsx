@@ -29,6 +29,30 @@ export default function ReceptionPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Form State
+  const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([]);
+  const [vets, setVets] = useState<Array<{ id: string; name: string; jobTitle?: string; role?: string }>>([]);
+
+  useEffect(() => {
+    fetch("/api/branches")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.branches?.length) {
+          setBranches(data.branches);
+          setFormData((p) => ({ ...p, branchId: p.branchId || data.branches[0].id }));
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/staff")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.users?.length) {
+          setVets(data.users);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const [formData, setFormData] = useState({
     // 1. Owner
     ownerName: "",
@@ -450,6 +474,26 @@ export default function ReceptionPage() {
             </CardHeader>
 
             <div className="space-y-4 pt-4">
+              {branches.length > 1 && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Branch / Clinic Location
+                  </label>
+                  <select
+                    name="branchId"
+                    value={formData.branchId}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-dark-border text-xs focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all text-slate-900 dark:text-white font-medium"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Assign to Veterinarian
@@ -461,8 +505,11 @@ export default function ReceptionPage() {
                   className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-dark-border text-xs focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all text-slate-900 dark:text-white font-medium"
                 >
                   <option value="">Next Available Veterinarian (Auto-assign)</option>
-                  <option value="dr-omar">Dr. Omar Khaled (Chief Surgeon)</option>
-                  <option value="dr-sara">Dr. Sara Mostafa (Internal Medicine)</option>
+                  {vets.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.jobTitle || v.role || "Doctor"})
+                    </option>
+                  ))}
                 </select>
               </div>
 

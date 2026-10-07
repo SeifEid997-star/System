@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
 
 function timeAgo(date: Date) {
   const diffMs = Date.now() - date.getTime();
@@ -15,10 +16,7 @@ function timeAgo(date: Date) {
 
 export async function GET(_req: NextRequest) {
   try {
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) {
-      return NextResponse.json({ error: "Clinic not found" }, { status: 400 });
-    }
+    const { clinic } = await getOrCreateDefaultClinicAndBranch();
 
     const now = new Date();
     const startOfToday = new Date(now);
