@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { logAuditForRequest } from "@/lib/audit";
+import { requireRole } from "@/lib/auth";
+import { verifyPassword } from "@/lib/password";
+import { logAudit } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { confirmationCode, userId = "usr-owner-omar" } = body;
+    // 1. Enforce OWNER role directly from verified DB session
+    const auth = await requireRole(req, ["OWNER"]);
+    if (auth.errorResponse) return auth.errorResponse;
+    const caller = auth.user;
+
+    const body = await req.json().catch(() => ({}));
+    const { confirmationCode, password } = body;
 
     if (confirmationCode !== "RESET-PETPALS") {
       return NextResponse.json(
@@ -14,37 +21,53 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) {
-      return NextResponse.json({ error: "Clinic not found" }, { status: 404 });
+    if (!password) {
+      return NextResponse.json(
+        { error: "Owner password is required to confirm factory reset." },
+        { status: 400 }
+      );
     }
 
-    // Execute safe zero-out transaction
+    // 2. Re-verify Owner's password for safety
+    const ownerRecord = await db.user.findUnique({
+      where: { id: caller.id },
+      select: { passwordHash: true },
+    });
+
+    if (!ownerRecord || !verifyPassword(password, ownerRecord.passwordHash)) {
+      return NextResponse.json(
+        { error: "Incorrect password. Factory reset authorization denied." },
+        { status: 401 }
+      );
+    }
+
+    const clinicId = caller.clinicId;
+
+    // 3. Execute safe clinic-scoped zero-out transaction
     const [
       deletedInvoices,
-      deletedBoarding,
       deletedCases,
       deletedAppointments,
       deletedAnimals,
       deletedOwners,
     ] = await db.$transaction([
-      db.invoice.deleteMany({ where: { clinicId: clinic.id } }),
-      db.boardingReservation.deleteMany({}),
-      db.medicalCase.deleteMany({ where: { clinicId: clinic.id } }),
-      db.appointment.deleteMany({ where: { clinicId: clinic.id } }),
-      db.animal.deleteMany({ where: { clinicId: clinic.id } }),
-      db.owner.deleteMany({ where: { clinicId: clinic.id } }),
+      db.invoice.deleteMany({ where: { clinicId } }),
+      db.medicalCase.deleteMany({ where: { clinicId } }),
+      db.appointment.deleteMany({ where: { clinicId } }),
+      db.animal.deleteMany({ where: { clinicId } }),
+      db.owner.deleteMany({ where: { clinicId } }),
     ]);
 
-    // Record initialization audit log
-    await logAuditForRequest(req, {
-      clinicId: clinic.id,
-      userId: userId,
-      userName: "Clinic Owner",
-      userRole: "OWNER",
+    // 4. Record audit log using verified caller identity
+    await logAudit({
+      clinicId,
+      userId: caller.id,
+      userName: caller.name,
+      userRole: caller.role,
       action: "DELETE",
       entity: "Settings",
-      details: `FACTORY RESET EXECUTED: Zeroed out database for clinic delivery. Deleted ${deletedOwners.count} owners, ${deletedAnimals.count} animals, ${deletedInvoices.count} invoices, ${deletedCases.count} medical cases.`,
+      entityId: clinicId,
+      details: `FACTORY RESET EXECUTED by ${caller.name} (${caller.email}). Deleted ${deletedOwners.count} owners, ${deletedAnimals.count} animals, ${deletedInvoices.count} invoices, ${deletedCases.count} medical cases.`,
     });
 
     return NextResponse.json({
@@ -56,13 +79,12 @@ export async function POST(req: NextRequest) {
         appointments: deletedAppointments.count,
         medicalCases: deletedCases.count,
         invoices: deletedInvoices.count,
-        boarding: deletedBoarding.count,
       },
     });
   } catch (error: any) {
     console.error("Factory reset error:", error);
     return NextResponse.json(
-      { error: "Failed to reset database", details: error.message },
+      { error: "Failed to reset database" },
       { status: 500 }
     );
   }

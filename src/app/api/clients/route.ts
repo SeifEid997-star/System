@@ -21,6 +21,10 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const query = searchParams.get("query") || "";
 
+    const limit = Math.min(Math.max(1, Number(searchParams.get("limit") || 100)), 200);
+    const page = Math.max(1, Number(searchParams.get("page") || 1));
+    const skip = (page - 1) * limit;
+
     const owners = await db.owner.findMany({
       where: query
         ? {
@@ -39,6 +43,8 @@ export async function GET(req: NextRequest) {
         },
       },
       orderBy: { createdAt: "desc" },
+      take: limit,
+      skip: skip,
     });
 
     const ownerIds = owners.map((o) => o.id);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
+import { requireRole } from "@/lib/auth";
 import { logAuditForRequest } from "@/lib/audit";
 import { cleanText, isValidPhone } from "@/lib/validation";
 
@@ -64,6 +65,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireRole(req, ["OWNER", "MANAGER"]);
+    if (auth.errorResponse) return auth.errorResponse;
+    const caller = auth.user;
+
     const body = await req.json();
     const { name, address, phone, status } = body;
     const cleanName = cleanText(name, 120);
@@ -78,7 +83,7 @@ export async function POST(req: NextRequest) {
 
     const branch = await db.branch.create({
       data: {
-        clinicId: clinic.id,
+        clinicId: caller.clinicId || clinic.id,
         name: cleanName,
         address: cleanAddress,
         phone: cleanPhone,
@@ -87,10 +92,10 @@ export async function POST(req: NextRequest) {
     });
 
     await logAuditForRequest(req, {
-      clinicId: clinic.id,
-      userId: "branch-manager",
-      userName: "Branch Administrator",
-      userRole: "MANAGER",
+      clinicId: caller.clinicId || clinic.id,
+      userId: caller.id,
+      userName: caller.name,
+      userRole: caller.role,
       action: "CREATE",
       entity: "Settings",
       entityId: branch.id,

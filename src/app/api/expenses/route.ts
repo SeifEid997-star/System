@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
+import { requireRole } from "@/lib/auth";
 import { logAuditForRequest } from "@/lib/audit";
 import { cleanText, finiteAmount } from "@/lib/validation";
 
@@ -34,6 +35,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireRole(req, ["OWNER", "MANAGER", "ACCOUNTANT"]);
+    if (auth.errorResponse) return auth.errorResponse;
+    const caller = auth.user;
+
     const body = await req.json();
     const { category, description, amount, method, branchId } = body;
     const cleanDescription = cleanText(description, 240);
@@ -46,22 +51,22 @@ export async function POST(req: NextRequest) {
 
     const expense = await db.expense.create({
       data: {
-        clinicId: clinic.id,
+        clinicId: caller.clinicId || clinic.id,
         branchId: branch.id,
         category: category || "Rent & Facilities",
         description: cleanDescription,
         amount: Number(amount),
         method: method || "Cash",
-        recordedBy: "Active Accountant",
+        recordedBy: caller.name,
       },
       include: { branch: true },
     });
 
     await logAuditForRequest(req, {
-      clinicId: clinic.id,
-      userId: "accounts-desk",
-      userName: "Active Accountant",
-      userRole: "ACCOUNTANT",
+      clinicId: caller.clinicId || clinic.id,
+      userId: caller.id,
+      userName: caller.name,
+      userRole: caller.role,
       action: "CREATE",
       entity: "Expense",
       entityId: expense.id,

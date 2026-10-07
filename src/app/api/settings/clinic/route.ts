@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
+import { requireRole } from "@/lib/auth";
 import { logAuditForRequest } from "@/lib/audit";
 import { cleanText, isValidEmail, isValidPhone } from "@/lib/validation";
 
@@ -16,6 +17,10 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
+    const auth = await requireRole(req, ["OWNER", "MANAGER"]);
+    if (auth.errorResponse) return auth.errorResponse;
+    const caller = auth.user;
+
     const body = await req.json();
     const {
       name,

@@ -10,6 +10,10 @@ export async function GET(req: NextRequest) {
     const branchId = searchParams.get("branchId");
     const status = searchParams.get("status");
 
+    const limit = Math.min(Math.max(1, Number(searchParams.get("limit") || 100)), 200);
+    const page = Math.max(1, Number(searchParams.get("page") || 1));
+    const skip = (page - 1) * limit;
+
     const appointments = await db.appointment.findMany({
       where: {
         AND: [
@@ -25,6 +29,8 @@ export async function GET(req: NextRequest) {
         branch: true,
       },
       orderBy: { appointmentDate: "asc" },
+      take: limit,
+      skip: skip,
     });
 
     return NextResponse.json({ appointments });

@@ -28,6 +28,10 @@ export async function GET(req: NextRequest) {
       ],
     };
 
+    const limit = Math.min(Math.max(1, Number(searchParams.get("limit") || 100)), 200);
+    const page = Math.max(1, Number(searchParams.get("page") || 1));
+    const skip = (page - 1) * limit;
+
     const items = await db.inventoryItem.findMany({
       where: whereClause,
       include: {
@@ -35,6 +39,8 @@ export async function GET(req: NextRequest) {
         branch: true,
       },
       orderBy: { updatedAt: "desc" },
+      take: limit,
+      skip: skip,
     });
 
     // Compute stats

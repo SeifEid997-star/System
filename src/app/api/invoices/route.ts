@@ -12,6 +12,10 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status");
     const query = searchParams.get("query") || "";
 
+    const limit = Math.min(Math.max(1, Number(searchParams.get("limit") || 100)), 200);
+    const page = Math.max(1, Number(searchParams.get("page") || 1));
+    const skip = (page - 1) * limit;
+
     const invoices = await db.invoice.findMany({
       where: {
         AND: [
@@ -34,6 +38,8 @@ export async function GET(req: NextRequest) {
         owner: true,
       },
       orderBy: { createdAt: "desc" },
+      take: limit,
+      skip: skip,
     });
 
     return NextResponse.json({ invoices });

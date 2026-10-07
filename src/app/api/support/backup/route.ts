@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { logAuditForRequest } from "@/lib/audit";
+import { requireRole } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 
-// Exports a genuine snapshot of the clinic's data (password hashes are
-// intentionally excluded from the User export for safety).
 export async function GET(req: NextRequest) {
   try {
-    const clinic = await db.clinic.findFirst();
-    if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 400 });
+    // 1. Strictly require OWNER role
+    const auth = await requireRole(req, ["OWNER"]);
+    if (auth.errorResponse) return auth.errorResponse;
+    const caller = auth.user;
+    const clinicId = caller.clinicId;
 
+    const clinic = await db.clinic.findUnique({ where: { id: clinicId } });
+    if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 404 });
+
+    // 2. Query data strictly scoped to this clinic
     const [
       branches,
       users,
@@ -21,8 +27,9 @@ export async function GET(req: NextRequest) {
       auditLogs,
       tickets,
     ] = await Promise.all([
-      db.branch.findMany(),
+      db.branch.findMany({ where: { clinicId } }),
       db.user.findMany({
+        where: { clinicId },
         select: {
           id: true,
           name: true,
@@ -33,18 +40,24 @@ export async function GET(req: NextRequest) {
           createdAt: true,
         },
       }),
-      db.owner.findMany(),
-      db.animal.findMany(),
-      db.appointment.findMany(),
-      db.medicalCase.findMany(),
-      db.invoice.findMany({ include: { items: true, payments: true } }),
-      db.inventoryItem.findMany(),
-      db.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 500 }),
-      db.clientTicket.findMany(),
+      db.owner.findMany({ where: { clinicId } }),
+      db.animal.findMany({ where: { clinicId } }),
+      db.appointment.findMany({ where: { clinicId } }),
+      db.medicalCase.findMany({ where: { clinicId } }),
+      db.invoice.findMany({ where: { clinicId }, include: { items: true, payments: true } }),
+      db.inventoryItem.findMany({ where: { clinicId } }),
+      db.auditLog.findMany({ where: { clinicId }, orderBy: { createdAt: "desc" }, take: 500 }),
+      db.clientTicket.findMany({ where: { clinicId } }),
     ]);
 
     const backup = {
       generatedAt: new Date().toISOString(),
+      generatedBy: {
+        id: caller.id,
+        name: caller.name,
+        email: caller.email,
+        role: caller.role,
+      },
       clinic,
       counts: {
         branches: branches.length,
@@ -72,27 +85,27 @@ export async function GET(req: NextRequest) {
       },
     };
 
-    await logAuditForRequest(req, {
-      clinicId: clinic.id,
-      userId: "system-backup",
-      userName: "System Backup",
-      userRole: "SYSTEM",
+    // 3. Record audit log with caller's verified identity
+    await logAudit({
+      clinicId,
+      userId: caller.id,
+      userName: caller.name,
+      userRole: caller.role,
       action: "EXPORT",
       entity: "Backup",
-      details: `Full data backup exported (${Object.values(backup.counts).reduce((a, b) => a + b, 0)} total rows)`,
+      entityId: clinicId,
+      details: `Full system backup downloaded by Owner: ${caller.name} (${caller.email}). Contained ${owners.length} owners, ${animals.length} pets, ${invoices.length} invoices.`,
     });
-
-    const filename = `PetPals_System_Backup_${new Date().toISOString().slice(0, 10)}.json`;
 
     return new NextResponse(JSON.stringify(backup, null, 2), {
       status: 200,
       headers: {
         "Content-Type": "application/json",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": `attachment; filename="petpals_backup_${new Date().toISOString().slice(0, 10)}.json"`,
       },
     });
   } catch (error) {
-    console.error("Backup export failed:", error);
+    console.error("Backup export error:", error);
     return NextResponse.json({ error: "Failed to generate backup" }, { status: 500 });
   }
 }

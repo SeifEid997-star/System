@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getOrCreateDefaultClinicAndBranch } from "@/lib/clinicBranch";
+import { requireRole } from "@/lib/auth";
 import { logAuditForRequest } from "@/lib/audit";
 import { hashPassword } from "@/lib/password";
 import { cleanText, isValidEmail, isValidPhone } from "@/lib/validation";
@@ -70,6 +71,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Enter a valid name, email, phone, role, experience, and password (12+ characters with upper/lower case and a number)" }, { status: 400 });
     }
 
+    const auth = await requireRole(req, ["OWNER", "MANAGER"]);
+    if (auth.errorResponse) return auth.errorResponse;
+    const caller = auth.user;
+
+    if (role === "OWNER" && caller.role !== "OWNER") {
+      return NextResponse.json(
+        { error: "Only clinic owners can assign the OWNER role" },
+        { status: 403 }
+      );
+    }
+
     const { clinic, branch } = await getOrCreateDefaultClinicAndBranch(branchId);
 
     if (await db.user.findUnique({ where: { email: cleanEmail } })) {
@@ -78,7 +90,7 @@ export async function POST(req: NextRequest) {
 
     const newUser = await db.user.create({
       data: {
-        clinicId: clinic.id,
+        clinicId: caller.clinicId || clinic.id,
         branchId: branch?.id,
         name: cleanName,
         email: cleanEmail,
@@ -98,12 +110,12 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Mandatory Audit Log
+    // Mandatory Audit Log using caller's real verified identity
     await logAuditForRequest(req, {
-      clinicId: clinic.id,
-      userId: "clinic-owner",
-      userName: "Dr. Omar Khaled",
-      userRole: "OWNER",
+      clinicId: caller.clinicId || clinic.id,
+      userId: caller.id,
+      userName: caller.name,
+      userRole: caller.role,
       action: "CREATE",
       entity: "Staff",
       entityId: newUser.id,

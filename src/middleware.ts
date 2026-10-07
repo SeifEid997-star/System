@@ -25,6 +25,24 @@ async function getSessionRole(token?: string) {
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  const method = request.method;
+
+  // CSRF Origin validation for mutating API requests
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && pathname.startsWith("/api/")) {
+    const origin = request.headers.get("origin");
+    if (origin) {
+      try {
+        const originHost = new URL(origin).host;
+        const host = request.headers.get("host") || request.nextUrl.host;
+        if (originHost !== host) {
+          return NextResponse.json({ error: "Cross-site request blocked" }, { status: 403 });
+        }
+      } catch {
+        return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
+      }
+    }
+  }
+
   if (pathname.startsWith("/api/auth/")) return NextResponse.next();
 
   const role = await getSessionRole(request.cookies.get(COOKIE_NAME)?.value);

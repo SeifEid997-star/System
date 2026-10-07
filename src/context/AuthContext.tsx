@@ -47,8 +47,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
     });
-    const result = await response.json();
-    if (!response.ok || !result.user) throw new Error(result.error || "Invalid email or password");
+
+    let result: any = null;
+    try {
+      result = await response.json();
+    } catch {
+      if (!response.ok) {
+        throw new Error(`خطأ في الاتصال بالخادم (${response.status}). يرجى إعادة المحاولة.`);
+      }
+      throw new Error("استجابة غير صالحة من الخادم. يرجى إعادة المحاولة.");
+    }
+
+    if (!response.ok || !result?.user) {
+      throw new Error(result?.error || "اسم المستخدم أو كلمة المرور غير صحيحة");
+    }
     setUser(result.user);
     router.push("/");
   };
